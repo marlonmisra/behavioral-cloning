@@ -67,8 +67,3 @@ There are a number of things I could have done to further improve the model. The
 * The training data I used mostly consisted of good driving. However this introduces a bias and makes the model less good at recovery. For improved accuracy, I would add additional data specifically focused on recovery (starting from the edges of a lane and returning to the center).
 
 
-
-
-
-
-# behavioral-cloning
