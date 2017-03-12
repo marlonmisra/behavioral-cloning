@@ -48,7 +48,7 @@ def generator(samples, batch_size):
                 #left and right
                 left_name = './data/IMG/'+batch_sample[1].split('/')[-1]
                 left_image = cv2.imread(left_name)
-                left_angle = float(batch_sample[3]) - 0.05
+                left_angle = float(batch_sample[3]) + 0.5
                 images.append(left_image)
                 measurements.append(left_angle)
                 images.append(cv2.flip(left_image,1))
@@ -56,7 +56,7 @@ def generator(samples, batch_size):
 
                 right_name = './data/IMG/'+batch_sample[2].split('/')[-1]
                 right_image = cv2.imread(right_name)
-                right_angle = float(batch_sample[3]) + 0.05
+                right_angle = float(batch_sample[3]) - 0.5
                 images.append(right_image)
                 measurements.append(right_angle)
                 images.append(cv2.flip(right_image,1))
@@ -133,7 +133,7 @@ def model():
     #train
     history = model.fit_generator(train_generator, 
                                   samples_per_epoch = len(train_samples) * 6,
-                                  nb_epoch = 2, 
+                                  nb_epoch = 1, 
                                   validation_data = (validation_generator),
                                   nb_val_samples = len(validation_samples) * 6,
                                   verbose = 1)                                
