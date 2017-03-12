@@ -36,7 +36,7 @@ To start with, I looked at the type of data I was dealing with. To summarize, th
 
 I then plotted a series of images using matplotlib to get a sense of data quality and data diversity. I found that all the images were informative - although there was a bias towards images with left turns.
 
-![Image plotting](assets/random_images.png =500px)
+![Image plotting](assets/random_images.png =500x50)
 
 
 ##Reading and splitting##
