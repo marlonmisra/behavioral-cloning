@@ -1,153 +1,156 @@
 import cv2
 import os
 import json
+import csv
 import numpy as np 
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.utils import gen_batches
+from sklearn.utils import gen_batches, shuffle
 from sklearn.model_selection import train_test_split
 from keras.models import Sequential
-from keras.layers import Dense, Input, Activation, Convolution2D, Flatten, Dropout, Cropping2D, Lambda
+from keras.layers import Dense, Input, Activation, Convolution2D, Flatten, Dropout, Cropping2D, Lambda, ELU
 
 
 
+#----------------------------------------------------------------------------------------------
+#read in samples info
+samples = []
+csvfile = pd.read_csv('./data/driving_log.csv')
+for row in csvfile.iterrows():
+    index, data = row
+    samples.append(data.tolist())
 
-#-----------------------------------------------------------------------------------------------
-#data reading
-
-#read the features
-def read_features(folder):
-	features =[]
-	for filename in os.listdir(folder):
-		#only include center images because no target info ofor other ones
-		if filename.startswith('center_'):
-			img = cv2.imread(os.path.join(folder, filename))
-			features.append(img)
-	return np.asarray(features)
-
-#read the targets
-def read_targets(file):
-	targets = pd.read_csv(file)
-	targets = np.array(targets)[:,3]    #only include the steering angle column
-	return targets
+#split data
+train_samples, validation_samples = train_test_split(samples, test_size=0.05)
 
 
-#set up data dictionary
-def read_data(features_folder, targets_file):
+#----------------------------------------------------------------------------------------------
+#generator
+def generator(samples, batch_size):
+    num_samples = len(samples)
+    while 1: # Continuous loop
+        for offset in range(0, num_samples, batch_size):
+            batch_samples = samples[offset:offset+batch_size]
 
-	data =  {
-	'features': None,
-	'targets': None
-	}
+            images = []
+            measurements = []
 
-	data['features'] = read_features(features_folder)
-	data['targets'] = read_targets(targets_file)
+            #reading and augmentation
+            for batch_sample in batch_samples:
+                center_name = './data/IMG/'+batch_sample[0].split('/')[-1]
+                center_image = cv2.imread(center_name)
+                center_angle = float(batch_sample[3])
+                images.append(center_image)
+                measurements.append(center_angle)
+                images.append(cv2.flip(center_image,1))
+                measurements.append(center_angle*-1.0)
 
-	print("Features shape:", data['features'].shape)
-	print("Targets shape:", data['targets'].shape)
+                #left and right
+                left_name = './data/IMG/'+batch_sample[1].split('/')[-1]
+                left_image = cv2.imread(left_name)
+                left_angle = float(batch_sample[3]) - 0.05
+                images.append(left_image)
+                measurements.append(left_angle)
+                images.append(cv2.flip(left_image,1))
+                measurements.append(left_angle*-1.0)
 
-	print("Finished reading data.")
-	return data
+                right_name = './data/IMG/'+batch_sample[2].split('/')[-1]
+                right_image = cv2.imread(right_name)
+                right_angle = float(batch_sample[3]) + 0.05
+                images.append(right_image)
+                measurements.append(right_angle)
+                images.append(cv2.flip(right_image,1))
+                measurements.append(right_angle*-1.0)
 
+            X_train = np.array(images)
+            y_train = np.array(measurements)
+            yield shuffle(X_train, y_train)
 
-data = read_data('IMG', 'driving_log.csv')
-X = data['features']
-y = data['targets']
-n_samples = data['features'].shape[0]
-height = data['features'].shape[1]
-length = data['features'].shape[2]
-channels = data['features'].shape[3]
+train_generator = generator(train_samples, batch_size=16)
+validation_generator = generator(validation_samples, batch_size=16)
 
 
 #----------------------------------------------------------------------------------------------
 #exploratory analysis
+def exploratory_analysis():
+    
+    #get some images
+    images_subset = next(train_generator)[0]
 
-#plot 9 random images
-def make_plots():
-	rand_indices = np.random.randint(0, n_samples, 9)
-	rand_images = X[rand_indices]
-	fig, axes = plt.subplots(nrows=3,ncols=3, figsize=(9,9))
-	axes = axes.ravel()
-	for ax, img in zip(axes,rand_images):
-		ax.imshow(img)
-		ax.axis('off')
-	plt.show()
+    #print stats
+    print("Training samples:", len(train_samples))
+    print("Validation samples:", len(validation_samples))
+    print("Image width:", len(images_subset[0]))
+    print("Image height:", len(images_subset[0][0]))
+    print("Image channels:", len(images_subset[0][0][0]))
 
-#make_plots()
+    #plot 9 images
+    rand_indices = np.random.randint(0, len(images_subset), 9)
+    rand_images = images_subset[rand_indices]
+    fig, axes = plt.subplots(nrows=3,ncols=3, figsize=(9,9))
+    axes = axes.ravel()
+    for ax, img in zip(axes, rand_images):
+        ax.imshow(img)
+        ax.axis('off')
+    plt.show()
 
+#exploratory_analysis()
 
-#----------------------------------------------------------------------------------------------
-#preprocessing
-
-#slight blur for better generalizability
-def blur(image):
-    kernel_size = 3
-    return cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
-
-
-#avoid numerical stability issues
-def normalize(image):
-	return image/255
-
-#apply feature processing functions
-def process(features):
-	features_processed = np.empty((n_samples, height, length, channels))
-	for i in range(0, n_samples):
-		features_processed[i] = normalize(blur(features[i]))
-	print("Finished processing data.")
-	return features_processed
-
-X_processed = process(X)
-
-
-#----------------------------------------------------------------------------------------------
-#training and validation split
-
-#split function
-def split_data():
-	X_train, X_valid, y_train, y_valid = train_test_split(X_processed, y, test_size = 0.1, random_state = 0)
-	print("Training samples:", len(X_train))
-	print("Validation samples:", len(X_valid))
-
-	print("Finished splitting data.")
-	return X_train, X_valid, y_train, y_valid
-
-X_train, X_valid, y_train, y_valid = split_data()
 
 
 #----------------------------------------------------------------------------------------------
 #model
-
 def model():
-	#define model
-	model = Sequential()
-	model.add(Cropping2D(cropping=((50,20), (0,0)), input_shape=(height, length, channels)))
-	#model.add(Lambda(lambda x: (x / 255.0) - 0.5))
-	model.add(Convolution2D(16, 5, 5, subsample=(2, 2), border_mode="same"))
-	model.add(Activation('relu'))
-	model.add(Convolution2D(32, 5, 5, subsample=(2, 2), border_mode="same"))
-	model.add(Activation('relu'))
-	model.add(Convolution2D(64, 5, 5, subsample=(2, 2), border_mode="same"))
-	model.add(Flatten())
-	model.add(Dropout(0.2))
-	model.add(Activation('relu'))
-	model.add(Dense(200))
-	model.add(Activation('relu'))
-	model.add(Dense(1))
+    #define model
+    model = Sequential()
+    model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(160, 320, 3)))
+    model.add(Cropping2D(cropping=((50,25),(0,0))))
+    model.add(Convolution2D(24, 5, 5, subsample=(2,2)))
+    model.add(ELU())
+    model.add(Convolution2D(36, 5, 5, subsample=(2,2)))
+    model.add(ELU())
+    model.add(Convolution2D(48, 5, 5, subsample=(2,2)))
+    model.add(ELU())
+    model.add(Convolution2D(64, 3, 3))
+    model.add(ELU())
+    model.add(Convolution2D(64, 3, 3))
+    model.add(ELU())
+    model.add(Flatten())
+    model.add(Dense(100))
+    model.add(Dropout(0.5))
+    model.add(ELU())
+    model.add(Dense(50))
+    model.add(Dropout(0.5))
+    model.add(ELU())
+    model.add(Dense(10))
+    model.add(Dense(1))
 
-	model.summary()
+    model.summary()
 
-	model.compile(loss='mean_squared_error', optimizer='adam')
+    model.compile(loss='mean_squared_error', optimizer='adam')
 
 
+    #train
+    history = model.fit_generator(train_generator, 
+                                  samples_per_epoch = len(train_samples) * 6,
+                                  nb_epoch = 2, 
+                                  validation_data = (validation_generator),
+                                  nb_val_samples = len(validation_samples) * 6,
+                                  verbose = 1)                                
+                               
 
-	#train
-	history = model.fit(X_train, y_train, batch_size = 64, nb_epoch = 10, validation_data = (X_valid, y_valid))
 
-	#save files
-	model.save_weights("model.h5", True)
-	with open('model.json', 'w') as outfile:
-	    json.dump(model.to_json(), outfile)
+    #save file
+    model.save('model.h5')    
 
 model()
+
+
+
+
+
+
+
+
+
 

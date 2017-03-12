@@ -17,7 +17,7 @@ The project includes the following files:
 * model.py containing the script to create and train the model
 * drive.py for driving the car in autonomous mode
 * model.h5 containing a trained convolution neural network 
-* video.zip containing a video.mov file of a successful lap
+* video.zip containing a video file of a successful lap
 * This report (README.md) summarizing the process and results
 
 
@@ -33,25 +33,54 @@ To start with, I looked at the type of data I was dealing with. To summarize, th
 * 8036 observations (images and associated steering angles)
 * Images which each have the dimension 160x320x3 (160 height, 320 width, 3 RGB colors channels)
 
+
 I then plotted a series of images using matplotlib to get a sense of data quality and data diversity. I found that all the images were informative - although there was a bias towards images with left turns.
 
-
-##Preprocessing##
-In the preprocessing stage, I did 2 things. First, I applied a slight Gaussian blur using the standard cv2 library to remove the effects of noise and reduce overfitting. Second, I normalized the image by dividing each pixel value by 255. This helps with numerical stability.
+![Image plotting](assets/random_images.png)
 
 
-##Data splitting##
-Next, I shuffled the data and split it intro training and validation sets. The validation set made up 10% of the overall size. 
+##Reading and splitting##
+I started by reading in the target files which contain the steering angles and the images. I then did a train/validation split and allocated 95% of the data to training.
+
+#Generator and augmentation
+Then I implemented a Python generator to read in the image files. This was important because my computer doesn't have enough memory to handle reading in all images. 
+
+In addition to the center images, I also read in the left and right images. I applied a 0.05 adjustment to the steering angles for the non-center images to account for the different perspective. I also did image augmentation by reflecting each image and multiplying the angles by -1. This was important because the training data had a bias towards left turns.
 
 
 ##Solution design##
-I started with a very simple two-layer fully connected network to make sure that I could make predictions. I tested on a  small number of observations, and didn't worry about overfitting. From there, I slowly added layers of complexity to make the model fit better - ensuring that loss decreased as I made changes. 
+I started with a simple two-layer fully connected network to make sure that I could make predictions. I tested on a  small number of observations, and didn't worry about overfitting. From there, I slowly added layers of complexity to make the model fit better - ensuring that loss decreased as I made changes. 
 
-The first layer I added was a Cropping2D layer which removed 50 pixels from the top of each image and 20 pixels from the bottom. I did this because I noticed that those areas of the image didn't provide any value (they were mostly trees and the sky). Then I added multiple Convolution2D layers with increasing depth and a frame of 5x5. This was similar to the Nvidia model so I figured it would be good. After the Convolution layers I also used relu activation layers to introduce non-linearity. Lastly, I added a dropout layer with dropout probability 0.2 to improve the robustness of the model and reduce overfitting.
+In terms of preprocessing, I made use of keras functions to do it in the neural network. I added a Lambda layer to normalize inputs and a cropping layer to remove 50 pixels from the top and 25 from the bottom - these seemed to not add any information. 
+
+I added multiple Convolution2D layers with increasing depth and a frames of 5x5 and 3x3.  Then, I added additional dense layers and dropout layers with dropout probability 0.2 and 0.5 to improve the robustness of the model and reduce overfitting. After each convolution layer, dropout layer, or dense layer, I used ELU activations to introduce non-linearity. 
+
+model = Sequential()
+    model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(160, 320, 3)))
+    model.add(Cropping2D(cropping=((50,25),(0,0))))
+    model.add(Convolution2D(24, 5, 5, subsample=(2,2)))
+    model.add(ELU())
+    model.add(Convolution2D(36, 5, 5, subsample=(2,2)))
+    model.add(ELU())
+    model.add(Convolution2D(48, 5, 5, subsample=(2,2)))
+    model.add(ELU())
+    model.add(Convolution2D(64, 3, 3))
+    model.add(ELU())
+    model.add(Convolution2D(64, 3, 3))
+    model.add(ELU())
+    model.add(Flatten())
+    model.add(Dense(100))
+    model.add(Dropout(0.5))
+    model.add(ELU())
+    model.add(Dense(50))
+    model.add(Dropout(0.5))
+    model.add(ELU())
+    model.add(Dense(10))
+    model.add(Dense(1))
 
 I used mean squared error as a loss function because this is a common standard that works well for these types of problems. I used the Adam optimizer so that I didn't have to worry about hyperparameter tuning. 
 
-For training, I played around with a number of batch size and epoch combinations to see what worked best. I found that after 10 epochs, improvements generally wore off. I also discovered that batch sizes of 64 generally performed well, with larger ones requiring too much memory. 
+For training, I played around with a number of batch size and epoch combinations to see what worked best. I found that after 10 epochs, improvements generally wore off. I also discovered that batch sizes of 92 worked well (batch size 16 * 6 dimensions of augmentation).
 
 
 ##Testing##
@@ -61,9 +90,8 @@ After training the final model, I ran the simulator in autonomous mode and was a
 ##Closing thoughts##
 There are a number of things I could have done to further improve the model. These include:
 * I didn't spend a lot of time training or tuning hyperparameters because I was doing the computations on my local machine. For additional accuracy, I would use Amazon EC2 and do training there. 
-* I could have collected more data or simulated new data. There were more images with left turns, so an easy way to generate additional data would've been to reflect images horizontally and invert steering angles. 
-* The car turns seemd rigid so one approach to improve that would've been to use a smoothing function that tracks a rolling average of recent steering angles and adjusts them towards their mean.
-* I only used the center images but could have also used the left and right images for additional accuracy. 
-* The training data I used mostly consisted of good driving. However this introduces a bias and makes the model less good at recovery. For improved accuracy, I would add additional data specifically focused on recovery (starting from the edges of a lane and returning to the center).
+* I could have collected more data or simulated additional data. I didn't generate any new data by adjusting shadows or brightness or applying translations and rotations. 
+* To make turns even more smooth, I could have used a smoothing function that tracks a rolling average of recent steering angles and adjusts them towards their mean.
+* The training data I used mostly consisted of good driving. However this introduces a bias and makes the model less good at recovery. For improved accuracy, I could have added additional data specifically focused on recovery (starting from the edges of a lane and returning to the center).
 
 
