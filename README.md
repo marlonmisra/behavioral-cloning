@@ -17,7 +17,7 @@ The project includes the following files:
 * model.py containing the script to create and train the model
 * drive.py for driving the car in autonomous mode
 * model.h5 containing a trained convolution neural network 
-* video.zip containing a video file of a successful lap
+* video.mp4 containing a video file of a successful lap
 * This report (README.md) summarizing the process and results
 
 
@@ -36,13 +36,13 @@ To start with, I looked at the type of data I was dealing with. To summarize, th
 
 I then plotted a series of images using matplotlib to get a sense of data quality and data diversity. I found that all the images were informative - although there was a bias towards images with left turns.
 
-![Image plotting](assets/random_images.png)
+![Image plotting](assets/random_images.png=500px)
 
 
 ##Reading and splitting##
 I started by reading in the target files which contain the steering angles and the images. I then did a train/validation split and allocated 95% of the data to training.
 
-#Generator and augmentation
+##Generator and augmentation##
 Then I implemented a Python generator to read in the image files. This was important because my computer doesn't have enough memory to handle reading in all images. 
 
 In addition to the center images, I also read in the left and right images. I applied a 0.05 adjustment to the steering angles for the non-center images to account for the different perspective. I also did image augmentation by reflecting each image and multiplying the angles by -1. This was important because the training data had a bias towards left turns.
@@ -55,7 +55,7 @@ In terms of preprocessing, I made use of keras functions to do it in the neural 
 
 I added multiple Convolution2D layers with increasing depth and a frames of 5x5 and 3x3.  Then, I added additional dense layers and dropout layers with dropout probability 0.2 and 0.5 to improve the robustness of the model and reduce overfitting. After each convolution layer, dropout layer, or dense layer, I used ELU activations to introduce non-linearity. 
 
-model = Sequential()
+```model = Sequential()
     model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(160, 320, 3)))
     model.add(Cropping2D(cropping=((50,25),(0,0))))
     model.add(Convolution2D(24, 5, 5, subsample=(2,2)))
@@ -77,6 +77,7 @@ model = Sequential()
     model.add(ELU())
     model.add(Dense(10))
     model.add(Dense(1))
+    ```
 
 I used mean squared error as a loss function because this is a common standard that works well for these types of problems. I used the Adam optimizer so that I didn't have to worry about hyperparameter tuning. 
 
